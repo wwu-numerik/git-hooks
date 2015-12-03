@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+
+"""
+    This pre-commit hook checks each staged file if it complies to the
+    formatting rules, as defined by clang-format (or the programm specified
+    in `git config hooks.clangformat`).
+"""
+
+import os
+import subprocess
+import sys
+import tempfile
+
+BASEDIR = os.getcwd()
+
+# alternative clang-format binary given?
+CLANGFORMAT=subprocess.run('git config hooks.clangformat',
+                           shell=True,
+                           cwd=BASEDIR,
+                           stdout=subprocess.PIPE,
+                           stderr=sys.stderr,
+                           universal_newlines=True).stdout
+if len(CLANGFORMAT.strip()) == 0:
+    CLANGFORMAT = 'clang-format'
+
+failures = 0
+out = subprocess.run('git diff --name-only --cached',
+                     shell=True,
+                     cwd=BASEDIR,
+                     stdout=subprocess.PIPE,
+                     stderr=sys.stderr,
+                     universal_newlines=True).stdout
+touched_files = sorted(out.splitlines())
+for touched_file in touched_files:
+    filename = os.path.join(BASEDIR, touched_file).strip()
+    out = subprocess.run('{} -style=file {}'.format(CLANGFORMAT, filename),
+                         shell=True,
+                         cwd=BASEDIR,
+                         stdout=subprocess.PIPE,
+                         stderr=sys.stderr,
+                         universal_newlines=True).stdout
+    tmp_filename = tempfile.NamedTemporaryFile(mode='w', delete=False).name
+    with open(tmp_filename, 'w') as tmp_file:
+        tmp_file.write(out)
+    out = subprocess.run('diff {} {}'.format(filename, tmp_filename),
+                         shell=True,
+                         cwd=BASEDIR,
+                         stdout=subprocess.PIPE,
+                         stderr=sys.stderr,
+                         universal_newlines=True).stdout
+    os.remove(tmp_filename)
+    if len(out.strip()) > 0:
+        print('clang-format has to be applied to \'{}\'!'.format(touched_file))
+        failures += 1
+
+if failures > 0:
+    print('ERROR: commit not successfull!')
+
+sys.exit(failures)
+
