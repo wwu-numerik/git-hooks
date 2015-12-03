@@ -54,7 +54,7 @@ for touched_file in touched_files:
         failures += 1
 
 if failures > 0:
-    print('ERROR: commit not successfull!')
+    print('ERROR: commit rejected due to bad formatting!')
 
 sys.exit(failures)
 
