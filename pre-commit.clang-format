@@ -32,6 +32,8 @@ out = subprocess.run('git diff --name-only --cached',
                      universal_newlines=True).stdout
 touched_files = sorted(out.splitlines())
 for touched_file in touched_files:
+    if not touched_file.split('.')[-1] in ('c', 'cc', 'cxx', 'h', 'hh', 'hxx'):
+        continue
     filename = os.path.join(BASEDIR, touched_file).strip()
     out = subprocess.run('{} -style=file {}'.format(CLANGFORMAT, filename),
                          shell=True,
