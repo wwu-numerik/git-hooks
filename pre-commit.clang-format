@@ -11,52 +11,66 @@ import subprocess
 import sys
 import tempfile
 
-BASEDIR = os.getcwd()
 
-# alternative clang-format binary given?
-CLANGFORMAT=subprocess.run('git config hooks.clangformat',
-                           shell=True,
-                           cwd=BASEDIR,
-                           stdout=subprocess.PIPE,
-                           stderr=sys.stderr,
-                           universal_newlines=True).stdout
-if len(CLANGFORMAT.strip()) == 0:
-    CLANGFORMAT = 'clang-format'
+class FormatRunException(RuntimeError):
+    pass
 
-failures = 0
-out = subprocess.run('git diff --name-only --cached',
-                     shell=True,
-                     cwd=BASEDIR,
-                     stdout=subprocess.PIPE,
-                     stderr=sys.stderr,
-                     universal_newlines=True).stdout
-touched_files = sorted(out.splitlines())
-for touched_file in touched_files:
-    if not touched_file.split('.')[-1] in ('c', 'cc', 'cxx', 'h', 'hh', 'hxx'):
-        continue
-    filename = os.path.join(BASEDIR, touched_file).strip()
-    out = subprocess.run('{} -style=file {}'.format(CLANGFORMAT, filename),
-                         shell=True,
-                         cwd=BASEDIR,
-                         stdout=subprocess.PIPE,
-                         stderr=sys.stderr,
-                         universal_newlines=True).stdout
-    tmp_filename = tempfile.NamedTemporaryFile(mode='w', delete=False).name
+
+class NonEmptyDiffException(Exception):
+    pass
+
+
+def check_dir(basedir, staged_only=True):
+    os.chdir(basedir)
+    # alternative clang-format binary given?
+    try:
+        clangformat = subprocess.check_output('git config hooks.clangformat',
+                                              shell=True,
+                                              cwd=basedir,
+                                              universal_newlines=True)
+    except subprocess.CalledProcessError as _:
+        clangformat = 'clang-format'
+    args = ['git', 'diff', '--name-only', '--cached']
+    if staged_only:
+        args.append('--cached')
+    out = subprocess.check_output(args,
+                                  universal_newlines=True)
+    fails = []
+    for changed_file in sorted(out.splitlines()):
+        try:
+            check_file(changed_file, basedir, clangformat.strip())
+        except NonEmptyDiffException as _:
+            fails.append(changed_file)
+    return fails
+
+def check_file(touched_file, basedir, format_binary, extension_whitelist=('c', 'cc', 'cxx', 'h', 'hh', 'hxx')):
+    if not touched_file.split('.')[-1] in extension_whitelist:
+        return
+    filename = os.path.join(basedir, touched_file).strip()
+    try:
+        out = subprocess.check_output([format_binary, '-style=file', filename],
+                                    universal_newlines=True)
+    except subprocess.CalledProcessError as e:
+        raise FormatRunException('Error executing {} on file\n{}'.format(format_binary, filename, e.output))
+    tmp_filename = tempfile.NamedTemporaryFile(mode='wb', delete=False).name
     with open(tmp_filename, 'w') as tmp_file:
         tmp_file.write(out)
-    out = subprocess.run('diff {} {}'.format(filename, tmp_filename),
-                         shell=True,
-                         cwd=BASEDIR,
-                         stdout=subprocess.PIPE,
-                         stderr=sys.stderr,
-                         universal_newlines=True).stdout
-    os.remove(tmp_filename)
-    if len(out.strip()) > 0:
-        print('clang-format has to be applied to \'{}\'!'.format(touched_file))
-        failures += 1
+    try:
+        subprocess.check_call(['diff', filename, tmp_filename],
+                                      universal_newlines=True)
+    except subprocess.CalledProcessError as res:
+        if res.returncode == 1:
+            raise NonEmptyDiffException('clang-format has to be applied to \'{}\'!'.format(filename))
+        raise RuntimeError('error diffing {} vs {}'.format(touched_file, tmp_filename))
+    finally:
+        os.remove(tmp_filename)
 
-if failures > 0:
-    print('ERROR: commit rejected due to bad formatting!')
-
-sys.exit(failures)
-
+if __name__ == '__main__':
+    try:
+        dirname = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+        fails = check_dir(dirname)
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+    else:
+        sys.exit(len(fails))
