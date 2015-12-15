@@ -24,9 +24,7 @@ def check_dir(basedir, staged_only=True):
     os.chdir(basedir)
     # alternative clang-format binary given?
     try:
-        clangformat = subprocess.check_output('git config hooks.clangformat',
-                                              shell=True,
-                                              cwd=basedir,
+        clangformat = subprocess.check_output(['git', 'config', 'hooks.clangformat'],
                                               universal_newlines=True)
     except subprocess.CalledProcessError as _:
         clangformat = 'clang-format'
@@ -42,6 +40,7 @@ def check_dir(basedir, staged_only=True):
         except NonEmptyDiffException as _:
             fails.append(changed_file)
     return fails
+
 
 def check_file(touched_file, basedir, format_binary, extension_whitelist=('c', 'cc', 'cxx', 'h', 'hh', 'hxx')):
     if not touched_file.split('.')[-1] in extension_whitelist:
