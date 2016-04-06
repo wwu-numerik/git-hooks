@@ -28,7 +28,7 @@ def check_dir(basedir, staged_only=True):
                                               universal_newlines=True)
     except subprocess.CalledProcessError as _:
         clangformat = 'clang-format'
-    args = ['git', 'diff', '--name-only', '--cached']
+    args = ['git', 'diff', '--name-only' ]
     if staged_only:
         args.append('--cached')
     out = subprocess.check_output(args,
