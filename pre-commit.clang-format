@@ -20,32 +20,40 @@ class NonEmptyDiffException(Exception):
     pass
 
 
-def check_dir(basedir, staged_only=True):
+def check_dir(basedir, mode='staged'):
+    """
+    :param basedir: absolute path to git root
+    :param mode: anyof 'staged', 'modified' or 'all' to select which files to check. Note
+                    staged files do not count as modified
+    :return: list of filename with non-empty diff to current state after applying clang-format
+    """
+    commands = {'staged': ['git', 'diff', '--name-only', '--cached'],
+                'modified': ['git', 'ls-files', '-m'],
+                'all': ['git', 'ls-files']}
     os.chdir(basedir)
     # alternative clang-format binary given?
     try:
         clangformat = subprocess.check_output(['git', 'config', 'hooks.clangformat'],
-                                              universal_newlines=True)
+                                              universal_newlines=True).strip()
     except subprocess.CalledProcessError as _:
         clangformat = 'clang-format'
-    args = ['git', 'diff', '--name-only' ]
-    if staged_only:
-        args.append('--cached')
-    out = subprocess.check_output(args,
+
+    out = subprocess.check_output(commands[mode],
                                   universal_newlines=True)
     fails = []
     for changed_file in sorted(out.splitlines()):
         try:
-            check_file(changed_file, basedir, clangformat.strip())
-        except NonEmptyDiffException as _:
+            check_file(changed_file, basedir, clangformat)
+        except NonEmptyDiffException:
             fails.append(changed_file)
     return fails
 
 
-def check_file(touched_file, basedir, format_binary, extension_whitelist=('c', 'cc', 'cxx', 'h', 'hh', 'hxx')):
-    if not touched_file.split('.')[-1] in extension_whitelist:
+def check_file(touched_file, basedir, format_binary, extension_whitelist=('.c', '.cc', '.cxx', '.h', '.hh', '.hxx')):
+    if os.path.splitext(touched_file)[1] not in extension_whitelist:
         return
-    filename = os.path.join(basedir, touched_file).strip()
+    filename = os.path.join(basedir, touched_file)
+
     try:
         out = subprocess.check_output([format_binary, '-style=file', filename],
                                     universal_newlines=True)
@@ -55,7 +63,7 @@ def check_file(touched_file, basedir, format_binary, extension_whitelist=('c', '
     with open(tmp_filename, 'w') as tmp_file:
         tmp_file.write(out)
     try:
-        subprocess.check_call(['diff', filename, tmp_filename],
+        subprocess.check_output(['diff', filename, tmp_filename],
                                       universal_newlines=True)
     except subprocess.CalledProcessError as res:
         if res.returncode == 1:
@@ -65,11 +73,8 @@ def check_file(touched_file, basedir, format_binary, extension_whitelist=('c', '
         os.remove(tmp_filename)
 
 if __name__ == '__main__':
-    try:
-        dirname = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
-        fails = check_dir(dirname)
-    except Exception as e:
-        print(e)
-        sys.exit(1)
-    else:
-        sys.exit(len(fails))
+    dirname = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.getcwd())
+    fails = check_dir(dirname, mode='all')
+    if len(fails) > 0:
+        print('files need to be formatted:\n\t{}'.format('\n\t'.join(fails)) )
+    sys.exit(len(fails))
