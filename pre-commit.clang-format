@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 
+CPP_EXTENSIONS = ('.c', '.cc', '.cxx', '.h', '.hh', '.hxx')
+
 
 class FormatRunException(RuntimeError):
     pass
@@ -49,7 +51,7 @@ def check_dir(basedir, mode='staged'):
     return fails
 
 
-def check_file(touched_file, basedir, format_binary, extension_whitelist=('.c', '.cc', '.cxx', '.h', '.hh', '.hxx')):
+def check_file(touched_file, basedir, format_binary, extension_whitelist=CPP_EXTENSIONS):
     if os.path.splitext(touched_file)[1] not in extension_whitelist:
         return
     filename = os.path.join(basedir, touched_file)
