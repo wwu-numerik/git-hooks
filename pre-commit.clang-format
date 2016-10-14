@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 
-CPP_EXTENSIONS = ('.c', '.cc', '.cxx', '.h', '.hh', '.hxx')
+CPP_EXTENSIONS = ('.c', '.cc', '.cxx', '.h', '.hh', '.hxx', '.pbh')
 
 
 class FormatRunException(RuntimeError):
